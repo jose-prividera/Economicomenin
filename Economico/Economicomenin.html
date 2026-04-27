@@ -481,6 +481,44 @@
             font-family: 'Courier New', monospace;
         }
 
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 0.6rem 0.8rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #ecf0f1;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .checkbox-item:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 0.8rem;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .checkbox-item label {
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #2c3e50;
+            user-select: none;
+            flex: 1;
+        }
+
+        .checkbox-item.checked {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-color: #667eea;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 2.5rem;
@@ -631,11 +669,12 @@
                 <div class="card-title">📋 Detalle de Egresos por Tipo</div>
             </div>
             
-            <div class="filter-group" style="max-width: 400px; margin-bottom: 1rem;">
-                <label class="filter-label">Filtrar por Tipo de Egreso</label>
-                <select id="filterTipoEgreso">
-                    <option value="">Todos los tipos</option>
-                </select>
+            <div style="margin-bottom: 1.5rem;">
+                <label class="filter-label" style="display: block; margin-bottom: 1rem;">Filtrar por Tipo de Egreso</label>
+                <div id="filterTipoEgresoContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0.8rem;">
+                    <!-- Los checkboxes se generarán dinámicamente aquí -->
+                </div>
+                <button class="reset-btn" onclick="resetEgresosFilter()" style="margin-top: 1rem; max-width: 250px;">🔄 Limpiar Selección</button>
             </div>
 
             <div class="stats-row" id="statsRow">
@@ -1009,31 +1048,57 @@
         }
 
         function initTipoEgresoFilter() {
-            const tipos = [...new Set(datosEgresos.map(d => d['Tipo egreso']))];
-            const filterTipo = document.getElementById('filterTipoEgreso');
+            const tipos = [...new Set(datosEgresos.map(d => d['Tipo egreso']))].sort();
+            const container = document.getElementById('filterTipoEgresoContainer');
+            container.innerHTML = ''; // Limpiar
             
-            tipos.forEach(tipo => {
-                const option = document.createElement('option');
-                option.value = tipo;
-                option.textContent = tipo;
-                filterTipo.appendChild(option);
+            tipos.forEach((tipo, index) => {
+                const checkboxId = `checkbox_tipo_${index}`;
+                
+                const checkboxItem = document.createElement('div');
+                checkboxItem.className = 'checkbox-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = checkboxId;
+                checkbox.value = tipo;
+                checkbox.onchange = function() { toggleCheckbox(this); };
+                
+                const label = document.createElement('label');
+                label.htmlFor = checkboxId;
+                label.textContent = tipo;
+                
+                checkboxItem.appendChild(checkbox);
+                checkboxItem.appendChild(label);
+                container.appendChild(checkboxItem);
             });
-
-            document.getElementById('filterTipoEgreso').addEventListener('change', filterEgresosDetalle);
         }
 
         function filterEgresosDetalle() {
             const proyectos = [...new Set(datosPrincipal.map(d => d.Negocio))];
             const proyectoNombre = proyectos[proyectoActual];
-            const tipoSeleccionado = document.getElementById('filterTipoEgreso').value;
-
+            
+            // Obtener tipos seleccionados desde los checkboxes
+            const checkboxes = document.querySelectorAll('#filterTipoEgresoContainer input[type="checkbox"]:checked');
+            const tiposSeleccionados = Array.from(checkboxes).map(cb => cb.value);
+            
+            console.log('Tipos seleccionados:', tiposSeleccionados);
+            console.log('Total egresos antes de filtrar:', datosEgresos.length);
+            
+            // Filtrar egresos
             let filteredEgresos = datosEgresos.filter(d => {
                 const matchProyecto = d.Negocio === proyectoNombre;
                 const matchMes = !filtrosGlobales.mes || d.Fecha === filtrosGlobales.mes;
                 const matchAño = !filtrosGlobales.año || d.Año == filtrosGlobales.año;
-                const matchTipo = !tipoSeleccionado || d['Tipo egreso'] === tipoSeleccionado;
+                
+                // Si no hay tipos seleccionados, mostrar todos
+                const matchTipo = tiposSeleccionados.length === 0 || 
+                                 tiposSeleccionados.includes(d['Tipo egreso']);
+                
                 return matchProyecto && matchMes && matchAño && matchTipo;
             });
+
+            console.log('Egresos filtrados:', filteredEgresos.length);
 
             const total = filteredEgresos.reduce((sum, d) => sum + d.Monto, 0);
             document.getElementById('filteredCount').textContent = filteredEgresos.length;
@@ -1041,6 +1106,7 @@
 
             const tbody = document.getElementById('egresosDetalleBody');
             tbody.innerHTML = filteredEgresos.map(d => {
+                // Calcular el % sobre el total FILTRADO
                 const porcentaje = total > 0 ? (d.Monto / total * 100) : 0;
                 return `
                     <tr>
@@ -1055,6 +1121,26 @@
                     </tr>
                 `;
             }).join('');
+        }
+        
+        function resetEgresosFilter() {
+            // Desmarcar todos los checkboxes
+            const checkboxes = document.querySelectorAll('#filterTipoEgresoContainer input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+                cb.checked = false;
+                cb.parentElement.classList.remove('checked');
+            });
+            filterEgresosDetalle();
+        }
+        
+        function toggleCheckbox(checkbox) {
+            const parent = checkbox.parentElement;
+            if (checkbox.checked) {
+                parent.classList.add('checked');
+            } else {
+                parent.classList.remove('checked');
+            }
+            filterEgresosDetalle();
         }
 
         function getShortProjectName(proyecto) {
@@ -1099,13 +1185,28 @@
                 selector.appendChild(btn);
             });
 
-            const filterTipo = document.getElementById('filterTipoEgreso');
-            filterTipo.innerHTML = '<option value="">Todos los tipos</option>';
-            const tipos = [...new Set(datosEgresos.map(d => d['Tipo egreso']))];
-            tipos.forEach(tipo => {
-                const opt = document.createElement('option');
-                opt.value = tipo; opt.textContent = tipo;
-                filterTipo.appendChild(opt);
+            // Reinicializar checkboxes de tipos de egreso
+            const container = document.getElementById('filterTipoEgresoContainer');
+            container.innerHTML = '';
+            const tipos = [...new Set(datosEgresos.map(d => d['Tipo egreso']))].sort();
+            tipos.forEach((tipo, index) => {
+                const checkboxId = `checkbox_tipo_${index}`;
+                const checkboxItem = document.createElement('div');
+                checkboxItem.className = 'checkbox-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = checkboxId;
+                checkbox.value = tipo;
+                checkbox.onchange = function() { toggleCheckbox(this); };
+                
+                const label = document.createElement('label');
+                label.htmlFor = checkboxId;
+                label.textContent = tipo;
+                
+                checkboxItem.appendChild(checkbox);
+                checkboxItem.appendChild(label);
+                container.appendChild(checkboxItem);
             });
 
             updateDashboard();
